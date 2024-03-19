@@ -1,0 +1,143 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Receptionist</title>
+  <!-- <link rel="stylesheet" href="styles.css"> -->
+</head>
+<body>
+  <style>
+    /* styles.css */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+  }
+  
+  .container {
+    width: 80%;
+    margin: 50px auto;
+  }
+  
+  .conversation {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  #user-input {
+    margin-bottom: 10px;
+  }
+  
+  #ai-response {
+    font-style: italic;
+  }
+  </style>
+  <div class="container">
+    <div class="conversation">
+      <div id="user-input"></div>
+      <div id="ai-response"></div>
+    </div>
+  </div>
+  <script>
+document.addEventListener('DOMContentLoaded', function () {
+  const userInput = document.getElementById('user-input');
+  const aiResponse = document.getElementById('ai-response');
+
+  // Initialize recognition object and speaking flag
+  let recognition = null;
+  let isSpeaking = false;
+  let isAIResponse = false; // Flag to differentiate AI response from user input
+
+  // Function to create and start speech recognition
+  function startSpeechRecognition() {
+    if ('webkitSpeechRecognition' in window) {
+      recognition = new webkitSpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+      recognition.lang = 'en-US';
+
+      recognition.onstart = function() {
+        console.log('Speech recognition started...');
+      };
+
+      recognition.onend = function() {
+        console.log('Speech recognition ended...');
+        // Restart recognition after it ends if not speaking
+        if (isAIResponse) {
+          startSpeechRecognition();
+          isAIResponse = false; // Reset AI response flag
+        }
+      };
+
+      recognition.onresult = function(event) {
+        // Get the transcript of the recognized speech
+        const transcript = event.results[0][0].transcript;
+
+        // Display the transcript in the UI
+        userInput.textContent = transcript;
+
+        // Send the transcript to the backend for further processing
+        sendUserInputToBackend(transcript);
+      };
+
+      // Start speech recognition
+      recognition.start();
+    } else {
+      alert('Speech recognition is not supported in this browser.');
+    }
+  }
+
+  // Function to send user input to the backend for further processing
+  function sendUserInputToBackend(userInput) {
+    fetch('/process_input', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ user_input: userInput }),
+    })
+    .then(response => response.json())
+    .then(data => {
+      aiResponse.textContent = data.response;
+      // Speak the AI response
+      isAIResponse = true;
+      speak(data.response);
+    })
+    .catch(error => {
+      console.error('Error processing user input:', error);
+    });
+  }
+
+  // Function to speak text using Web Speech API
+  function speak(text) {
+    isSpeaking = true; // Set speaking flag to true
+    const utterance = new SpeechSynthesisUtterance(text);
+    const maxSpeechDuration = 30000;
+    const timeoutId = setTimeout(function() {
+      console.warn('Speech duration exceeded maximum limit. Stopping speech.');
+      window.speechSynthesis.cancel(); // Cancel speech synthesis
+    }, maxSpeechDuration);
+    utterance.onend = function(event) {
+      clearTimeout(timeoutId);
+      isSpeaking = false; // Reset speaking flag to false after speech ends
+      if (isAIResponse) {
+          recognition.start(); // Start recognition after AI response
+          isAIResponse = false; // Reset AI response flag
+      }
+    };
+    utterance.onerror = function(event) {
+      console.error('Error during speech synthesis:', event.error);
+      clearTimeout(timeoutId);
+      isSpeaking = false; // Reset speaking flag on error
+    };
+    window.speechSynthesis.speak(utterance);
+  }
+
+  // Start speech recognition when the page loads
+  startSpeechRecognition();
+});
+  </script>
+</body>
+</html>
